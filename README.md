@@ -56,6 +56,7 @@ for feats in feats_to_try:
 ```
 
 Day's best: 0.87978
+
 Overall Best: 0.87978
 
 #### Reflections
@@ -83,6 +84,7 @@ Overall Best: 0.87978
 * Procured AUC scores of around 0.5 everytime. Spent some time fiddling, but then dropped it.
 
 Day's best: ~0.45 (Obviously, something went very wrong. Still don't quite know what. Did not have time to investigate.)
+
 Overall Best: 0.87978
 
 #### Reflections
@@ -137,6 +139,7 @@ result = xgb.cv(param,
 ```
 
 Day's best: 0.88192
+
 Overall best: 0.88192
 
 #### Reflections
@@ -236,6 +239,7 @@ def tune_iteratively(params, dec):
 ```
 
 Day's best: null (Did not, in the end, submit any scores; had other things to attend to.)
+
 Overall best: 0.88192
 
 #### Reflections
@@ -280,6 +284,7 @@ var_param = {
 ```
 
 Day's best: 0.89364
+
 Overall best: 0.89364
 
 #### Reflections
@@ -350,6 +355,7 @@ def feature_selector(df):
 * Use LightGBM and our favoured parameters with the newly selected columns.
 
 Day's best: 0.89395
+
 Overall best: 0.89395
 
 #### Reflections
@@ -465,6 +471,7 @@ last_predictions = calibrator.predict_proba(test)[:, 1]
 ```
 
 Day's best: 0.89395
+
 Overall best: 0.89395
 
 #### Reflections
