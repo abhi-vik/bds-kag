@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <title>README.md - Grip</title>
+  <link rel="icon" href="http://localhost:6419/__/grip/static/favicon.ico">
+  <link rel="stylesheet" href="README.md%20-%20Grip_files/frameworks-94d2de65a56b07e193e50e91873678b6.css">
+  <link rel="stylesheet" href="README.md%20-%20Grip_files/github-3c4881237e97cb689271ee2f91e36269.css">
+  <link rel="stylesheet" href="README.md%20-%20Grip_files/site-09367dd1ae1784b858e71c8471ca0949.css">
+  <link rel="stylesheet" href="README.md%20-%20Grip_files/octicons.css">
+  <style>
+    /* Page tweaks */
+    .preview-page {
+      margin-top: 64px;
+    }
+    /* User-content tweaks */
+    .timeline-comment-wrapper > .timeline-comment:after,
+    .timeline-comment-wrapper > .timeline-comment:before {
+      content: none;
+    }
+    /* User-content overrides */
+    .discussion-timeline.wide {
+      width: 920px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div id="preview-page" class="preview-page" data-autorefresh-url="/__/grip/refresh/">
+
+    
+
+      <div role="main" class="main-content">
+        <div class="container new-discussion-timeline experiment-repo-nav">
+          <div class="repository-content">
+            <div id="readme" class="readme boxed-group clearfix announce instapaper_body md">
+              
+                <h3>
+                  <span class="octicon octicon-book"></span>
+                  README.md
+                </h3>
+              
+              <article class="markdown-body entry-content" itemprop="text" id="grip-content">
+                <h1>
+<a id="user-content-mis382n-fall-2019-kaggle-competition" class="anchor" href="#mis382n-fall-2019-kaggle-competition" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>MIS382N Fall 2019 Kaggle competition</h1>
+<p><a href="https://www.kaggle.com/c/mis382n-fall-2019" rel="nofollow">https://www.kaggle.com/c/mis382n-fall-2019</a></p>
+<p>- Abhilash Vikram Gupta</p>
+<p>This will describe our day-to-day analyses and evolving strategies to get the highest possible ROC-AUC score on the data.</p>
+<p>Ideally a data science exercise starts with a lot of exploratory 
+analysis, has some breakthroughs, constructs features, implements 
+algorithms, refines some and ultimately converges on a final solution. 
+The 5-submissions-a-day format of this competition makes it infeasible 
+to proceed in this manner. This report (which doubles as a journal) will
+ describe a more iterative approach in which we will attempt a handful 
+of techniques each day, see how they perform and use the feedback to 
+deduce what works and what does not.</p>
+<p>It is observed that this competition is clocked at UTC time. It makes
+ sense to make 5 submissions each day ending 7 PM, and be sure to 
+reflect upon what went right/wrong in some of the remaining time.</p>
+<h2>
+<a id="user-content-day-1" class="anchor" href="#day-1" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Day 1</h2>
+<h4>
+<a id="user-content-ideas" class="anchor" href="#ideas" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Ideas</h4>
+<ul>
+<li>We have precious little time here, if we want to beat the 7:00 PM day deadline.</li>
+<li>First glance: supervised binary classification with a heavy bias. 
+Some features look like categorical variables, but our belief is that 
+this is deceptive and that they are in fact count-like. This is because 
+not only are the variables missing the 0 key but also are missing some 
+other values in between. Some of the other columns show heavy variation 
+and others still are quite large (5-digit).</li>
+<li>Key concepts to use:
+<ul>
+<li>Recursive Feature Selection: with cross validation to select the best features.</li>
+<li>StratifiedKFold: Stratified because we have an imbalanced dataset with a lot of variance between features.</li>
+</ul>
+</li>
+</ul>
+<div class="highlight highlight-source-python"><pre><span class="pl-k">def</span> <span class="pl-en">get_best_features</span>(<span class="pl-smi">model</span>, <span class="pl-smi">data</span>, <span class="pl-smi">step</span><span class="pl-k">=</span><span class="pl-c1">1</span>):
+    rfecv <span class="pl-k">=</span> RFECV(<span class="pl-v">estimator</span><span class="pl-k">=</span>model, <span class="pl-v">step</span><span class="pl-k">=</span>step, <span class="pl-v">cv</span><span class="pl-k">=</span>StratifiedKFold(<span class="pl-c1">5</span>), <span class="pl-v">scoring</span><span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">'</span>roc_auc<span class="pl-pds">'</span></span>, <span class="pl-v">n_jobs</span><span class="pl-k">=</span><span class="pl-k">-</span><span class="pl-c1">1</span>)
+    rfecv.fit(data, y)
+
+    <span class="pl-k">return</span> get_ind(rfecv.ranking_ <span class="pl-k">==</span> <span class="pl-c1">1</span>)</pre></div>
+<ul>
+<li>Scaling followed by logistic regression gives a bad ROC-AUC score and is hopelessly biased towards the dominant label.</li>
+<li>A plain decision tree overfits hard. In fact, it gives an AUC of 1.0 on train data using just <code>f14</code>.</li>
+<li>RFC does alright, but the score does not rise above 0.85. If we have
+ aspirations of the highest possible score, we need to use gradient 
+boosting.</li>
+<li>Considering LightGBM and XGBoost right now -- start with LightGBM because we have never used it and XGBoost is slow.</li>
+<li>Tuning LightGBM -- key realizations:
+<ul>
+<li>LGBM attempts to replicate scikit-learn's API.</li>
+<li>The <code>goss</code> <code>boosting_type</code> parameter makes LGBM boosting <em>insanely</em> fast.</li>
+<li>We need to set class weights somewhere.</li>
+<li>Use all available processors, always.</li>
+<li>Focus heavily on controlling tree depth and learning depth (eta). 
+There appear to be maxima -- combinations of eta, depth and the number 
+of estimators that give good results at certain spots and bad results at
+ others.</li>
+</ul>
+</li>
+</ul>
+<div class="highlight highlight-source-python"><pre><span class="pl-k">for</span> feats <span class="pl-k">in</span> feats_to_try:
+
+    grid <span class="pl-k">=</span> GridSearchCV(xgb.XGBClassifier(), 
+                        tuning_parameters, 
+                        <span class="pl-v">cv</span><span class="pl-k">=</span>StratifiedKFold(<span class="pl-c1">5</span>), 
+                        <span class="pl-v">scoring</span><span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">'</span>roc_auc<span class="pl-pds">'</span></span>, 
+                        <span class="pl-v">n_jobs</span><span class="pl-k">=</span><span class="pl-k">-</span><span class="pl-c1">1</span>)
+    
+    grid.fit(X[:, feats], y)
+    
+    <span class="pl-c1">print</span>(<span class="pl-s">f</span><span class="pl-pds">'</span><span class="pl-s">Best parameters </span><span class="pl-c1">{</span>grid.best_params_<span class="pl-c1">}</span><span class="pl-s">.</span><span class="pl-pds">'</span>)
+    <span class="pl-c1">print</span>(<span class="pl-s">f</span><span class="pl-pds">'</span><span class="pl-s">Best auc score is </span><span class="pl-c1">{</span>grid.best_score_<span class="pl-c1">}</span><span class="pl-s">.</span><span class="pl-pds">'</span>)</pre></div>
+<p>Day's best: 0.87978
+Overall Best: 0.87978</p>
+<h4>
+<a id="user-content-reflections" class="anchor" href="#reflections" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Reflections</h4>
+<h5>
+<a id="user-content-what-went-well" class="anchor" href="#what-went-well" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What went well</h5>
+<ol>
+<li>Got five submissions off despite short notice.</li>
+<li>We seem to have the top spot, for now.</li>
+</ol>
+<h5>
+<a id="user-content-what-we-learnt" class="anchor" href="#what-we-learnt" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What we learnt</h5>
+<ol>
+<li>(Maybe) XGBoost might be more accurate than LightGBM but takes 
+longer on larger datasets. One smart thing to do would be to use 
+LightGBM on early on, when doing iterative testing, and use equivalent 
+settings with XGBoost as the end of the competition draws near.</li>
+<li>It is difficult to say which are the true features. It might be 
+right to vary the features a little, taking 7 to 10 at a time and see 
+how that fares.</li>
+</ol>
+<h5>
+<a id="user-content-how-we-can-improve" class="anchor" href="#how-we-can-improve" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How we can improve</h5>
+<ol>
+<li>Over-relying on LightGBM might leave us blind to other ways of solving the problem.</li>
+<li>Need to learn more about decision trees and gradient boosting to tune better.</li>
+<li>Could possibly use neural networks? Can investigate.</li>
+</ol>
+<h2>
+<a id="user-content-day-2" class="anchor" href="#day-2" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Day 2</h2>
+<h4>
+<a id="user-content-ideas-1" class="anchor" href="#ideas-1" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Ideas</h4>
+<ul>
+<li>There seems to be a bit of an accuracy jump with  <code>f1</code>, <code>f4</code>, <code>f8</code>, <code>f13</code>, <code>f14</code>, <code>f15</code>, <code>f16</code> and <code>f18</code> that subsides when we add <code>f7</code> to the mix. This was as an observation from day 1 that we failed to record.</li>
+<li>Spend the day attempting neural networks. Know that we cannot use 
+the convolutional neural networks based predictions that we did in image
+ classification. Have to try something else.</li>
+<li>Procured AUC scores of around 0.5 everytime. Spent some time fiddling, but then dropped it.</li>
+</ul>
+<p>Day's best: ~0.45 (Obviously, something went very wrong. Still don't quite know what. Did not have time to investigate.)
+Overall Best: 0.87978</p>
+<h4>
+<a id="user-content-reflections-1" class="anchor" href="#reflections-1" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Reflections</h4>
+<h5>
+<a id="user-content-what-went-well-1" class="anchor" href="#what-went-well-1" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What went well</h5>
+<ol>
+<li>Very little. Using deep learning may be possible, but it will require time and patience.</li>
+</ol>
+<h5>
+<a id="user-content-what-we-learnt-1" class="anchor" href="#what-we-learnt-1" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What we learnt</h5>
+<ol>
+<li>Neural networks are terrible for classification with imbalanced datasets (at least, straight out of the box).</li>
+<li>Focus on gradient boosting for now. Can come back to neural networks later.</li>
+</ol>
+<h5>
+<a id="user-content-how-we-can-improve-1" class="anchor" href="#how-we-can-improve-1" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How we can improve</h5>
+<ol>
+<li>Learning and using XGBoost is something that should definitely be done.</li>
+<li>Spend more time with keras, etc. but later.</li>
+</ol>
+<h2>
+<a id="user-content-day-3" class="anchor" href="#day-3" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Day 3</h2>
+<h4>
+<a id="user-content-ideas-2" class="anchor" href="#ideas-2" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Ideas</h4>
+<ul>
+<li>This is XGBoost day. Attempt to master the different parameters being used and beat the score set by LightGBM.</li>
+<li>It looks like XGBoost also supports the familiar scikit-learn format
+ api too. But we will use the XGBoost native format this time.</li>
+</ul>
+<div class="highlight highlight-source-python"><pre>param <span class="pl-k">=</span> {<span class="pl-s"><span class="pl-pds">'</span>max_depth<span class="pl-pds">'</span></span>: <span class="pl-c1">6</span>, 
+         <span class="pl-s"><span class="pl-pds">'</span>eta<span class="pl-pds">'</span></span>: <span class="pl-c1">0.1</span>, 
+         <span class="pl-s"><span class="pl-pds">'</span>objective<span class="pl-pds">'</span></span>:<span class="pl-s"><span class="pl-pds">'</span>binary:logistic<span class="pl-pds">'</span></span>, 
+         <span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>: <span class="pl-c1">200</span>, 
+         <span class="pl-s"><span class="pl-pds">'</span>booster<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>gbtree<span class="pl-pds">'</span></span>, 
+         <span class="pl-s"><span class="pl-pds">'</span>tree_method<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>auto<span class="pl-pds">'</span></span>, 
+         <span class="pl-s"><span class="pl-pds">'</span>reg_alpha<span class="pl-pds">'</span></span>: <span class="pl-c1">0.001</span>, 
+         <span class="pl-s"><span class="pl-pds">'</span>reg_lambda<span class="pl-pds">'</span></span>: <span class="pl-c1">0.9</span>, 
+         <span class="pl-s"><span class="pl-pds">'</span>eval_metric<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>auc<span class="pl-pds">'</span></span>, 
+         <span class="pl-s"><span class="pl-pds">'</span>nthread<span class="pl-pds">'</span></span>: <span class="pl-k">-</span><span class="pl-c1">1</span>}
+
+num_round <span class="pl-k">=</span> <span class="pl-c1">120</span>
+
+<span class="pl-c"><span class="pl-c">#</span> set scale_post_weight each time</span>
+<span class="pl-k">def</span> <span class="pl-en">fpreproc</span>(<span class="pl-smi">dtrain</span>, <span class="pl-smi">dtest</span>, <span class="pl-smi">param</span>):
+    label <span class="pl-k">=</span> dtrain.get_label()
+    ratio <span class="pl-k">=</span> <span class="pl-c1">float</span>(np.sum(label <span class="pl-k">==</span> <span class="pl-c1">0</span>)) <span class="pl-k">/</span> np.sum(label <span class="pl-k">==</span> <span class="pl-c1">1</span>)
+    param[<span class="pl-s"><span class="pl-pds">'</span>scale_pos_weight<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> ratio
+    <span class="pl-k">return</span> (dtrain, dtest, param)
+
+result <span class="pl-k">=</span> xgb.cv(param, 
+                dtrain, 
+                num_round, 
+                <span class="pl-v">nfold</span><span class="pl-k">=</span><span class="pl-c1">5</span>, 
+                <span class="pl-v">stratified</span><span class="pl-k">=</span><span class="pl-c1">True</span>, 
+                <span class="pl-v">metrics</span><span class="pl-k">=</span>{ <span class="pl-s"><span class="pl-pds">'</span>auc<span class="pl-pds">'</span></span> }, 
+                <span class="pl-v">fpreproc</span><span class="pl-k">=</span>fpreproc)</pre></div>
+<p>Day's best: 0.88192
+Overall best: 0.88192</p>
+<h4>
+<a id="user-content-reflections-2" class="anchor" href="#reflections-2" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Reflections</h4>
+<h5>
+<a id="user-content-what-went-well-2" class="anchor" href="#what-went-well-2" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What went well</h5>
+<ol>
+<li>A miniscule improvement in the best prediction set.</li>
+<li>A better understanding of gradient boosting and XGBoost.</li>
+</ol>
+<h5>
+<a id="user-content-what-we-learnt-2" class="anchor" href="#what-we-learnt-2" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What we learnt</h5>
+<ol>
+<li>XGBoost is far, far slower than LightGBM. This means more time waiting for results and less time actually looking at them.</li>
+<li>Setting the correct <code>scale_pos_weight</code> (number of negative class divided by number of positive class) yields an increase of ~0.002.</li>
+<li>The increased AUC ROC score today may, in my opinion, be attributed 
+to a combination of randomness and a better understanding of l1 and l2 
+regularization -- little else.</li>
+<li>Unless there are other as of yet unknown benefits of XGBoost, we should prefer LightGBM in the long term.</li>
+</ol>
+<h5>
+<a id="user-content-how-we-can-improve-2" class="anchor" href="#how-we-can-improve-2" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How we can improve</h5>
+<ol>
+<li>Do some data engineering. Attempt polynomial features and interaction terms.</li>
+</ol>
+<h2>
+<a id="user-content-day-4" class="anchor" href="#day-4" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Day 4</h2>
+<h4>
+<a id="user-content-ideas-3" class="anchor" href="#ideas-3" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Ideas</h4>
+<ul>
+<li>Spend the day on feature creation and decomposition.</li>
+<li>Attempt an auto-tuning process. Each loop should:
+<ul>
+<li>Find the most important features in the original dataset for the best current model.</li>
+<li>Create new features that are exponential (eg. **0.5, **2) of these original features.</li>
+<li>Scale the same original features and create interaction terms (added and subtracted).</li>
+<li>Use recursive feature elimination with cross validation to select the best of all of the features combined.</li>
+<li>Take the best parameters in the previously selected model. Create 
+the parameters for a grid search by slightly altering the parameters.</li>
+<li>Weigh the variation in parameters by multiplying the variation with a
+ decomposition term -- a number that keeps decreasing until it hits 
+zero.</li>
+<li>Use the generated range of parameters to select the best model using a grid search with cross validation.</li>
+<li>Decrement the decomposition term and repeat the process.</li>
+</ul>
+</li>
+</ul>
+<div class="highlight highlight-source-python"><pre><span class="pl-k">def</span> <span class="pl-en">generate_train</span>(<span class="pl-smi">dataframe</span>, <span class="pl-smi">model</span>):
+    train_dataframe <span class="pl-k">=</span> dataframe.drop(<span class="pl-s"><span class="pl-pds">'</span>Y<span class="pl-pds">'</span></span>, <span class="pl-v">axis</span><span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">'</span>columns<span class="pl-pds">'</span></span>)
+    labels <span class="pl-k">=</span> dataframe[<span class="pl-s"><span class="pl-pds">'</span>Y<span class="pl-pds">'</span></span>]
+    
+    feature_ratings <span class="pl-k">=</span> model.fit(train_dataframe.values, labels).feature_importances_
+    first, second, third <span class="pl-k">=</span> get_best_ind(feature_ratings, <span class="pl-c1">3</span>, <span class="pl-c1">1</span>)[<span class="pl-c1">0</span>]
+    first_name, second_name, third_name <span class="pl-k">=</span> indices_to_names(train_dataframe, [first, second, third])
+    
+    train_dataframe[first_name <span class="pl-k">+</span> <span class="pl-s"><span class="pl-pds">'</span>*1.5<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> train_dataframe[first_name] <span class="pl-k">**</span> <span class="pl-c1">1.5</span>
+    train_dataframe[first_name <span class="pl-k">+</span> <span class="pl-s"><span class="pl-pds">'</span>*2<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> train_dataframe[first_name] <span class="pl-k">**</span> <span class="pl-c1">2</span>
+    
+    relevant_columns <span class="pl-k">=</span> train_dataframe[[first_name, second_name, third_name]].values
+    scaled <span class="pl-k">=</span> StandardScaler().fit_transform(relevant_columns)
+    fused <span class="pl-k">=</span> PCA(<span class="pl-v">n_components</span><span class="pl-k">=</span><span class="pl-c1">1</span>).fit_transform(scaled[:, <span class="pl-c1">1</span>:]).ravel()
+    
+    train_dataframe[first_name <span class="pl-k">+</span> <span class="pl-s"><span class="pl-pds">'</span>+fused<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> scaled[:, <span class="pl-c1">0</span>] <span class="pl-k">+</span> fused
+    train_dataframe[first_name <span class="pl-k">+</span> <span class="pl-s"><span class="pl-pds">'</span>-fused<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> scaled[:, <span class="pl-c1">0</span>] <span class="pl-k">-</span> fused
+    
+    <span class="pl-k">return</span> train_dataframe
+
+<span class="pl-k">def</span> <span class="pl-en">alter_params</span>(<span class="pl-smi">params</span>, <span class="pl-smi">dec</span>):
+    new_params <span class="pl-k">=</span> {}
+    new_params[<span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> [<span class="pl-c1">round</span>(params[<span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>] <span class="pl-k">+</span> np.ceil(dec)), 
+                                  <span class="pl-c1">round</span>(params[<span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>] <span class="pl-k">-</span> np.ceil(dec))]
+    new_params[<span class="pl-s"><span class="pl-pds">'</span>learning_rate<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> [params[<span class="pl-s"><span class="pl-pds">'</span>learning_rate<span class="pl-pds">'</span></span>] <span class="pl-k">+</span> <span class="pl-c1">0.001</span> <span class="pl-k">*</span> dec, 
+                                   params[<span class="pl-s"><span class="pl-pds">'</span>learning_rate<span class="pl-pds">'</span></span>] <span class="pl-k">-</span> <span class="pl-c1">0.001</span> <span class="pl-k">*</span> dec]
+    new_params[<span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> [<span class="pl-c1">round</span>(params[<span class="pl-s"><span class="pl-pds">'</span>num_leaves<span class="pl-pds">'</span></span>] <span class="pl-k">+</span> np.ceil(<span class="pl-c1">0.05</span> <span class="pl-k">*</span> dec)), 
+                                  <span class="pl-c1">round</span>(params[<span class="pl-s"><span class="pl-pds">'</span>num_leaves<span class="pl-pds">'</span></span>] <span class="pl-k">-</span> np.ceil(<span class="pl-c1">0.05</span> <span class="pl-k">*</span> dec))]
+    new_params[<span class="pl-s"><span class="pl-pds">'</span>reg_alpha<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> [params[<span class="pl-s"><span class="pl-pds">'</span>reg_alpha<span class="pl-pds">'</span></span>] <span class="pl-k">*</span> (<span class="pl-c1">1</span> <span class="pl-k">+</span> (<span class="pl-c1">0.02</span> <span class="pl-k">*</span> dec)), 
+                               params[<span class="pl-s"><span class="pl-pds">'</span>reg_alpha<span class="pl-pds">'</span></span>] <span class="pl-k">*</span> (<span class="pl-c1">1</span> <span class="pl-k">-</span> (<span class="pl-c1">0.02</span> <span class="pl-k">*</span> dec))]
+    new_params[<span class="pl-s"><span class="pl-pds">'</span>reg_lambda<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> [params[<span class="pl-s"><span class="pl-pds">'</span>reg_lambda<span class="pl-pds">'</span></span>] <span class="pl-k">+</span> (<span class="pl-c1">0.05</span> <span class="pl-k">*</span> dec), 
+                                params[<span class="pl-s"><span class="pl-pds">'</span>reg_lambda<span class="pl-pds">'</span></span>] <span class="pl-k">-</span> (<span class="pl-c1">0.05</span> <span class="pl-k">*</span> dec)]
+    <span class="pl-k">return</span> new_params
+
+<span class="pl-k">def</span> <span class="pl-en">tune_iteratively</span>(<span class="pl-smi">params</span>, <span class="pl-smi">dec</span>):
+    <span class="pl-k">if</span> dec <span class="pl-k">&lt;</span> <span class="pl-c1">1</span>:
+        <span class="pl-k">return</span>
+    
+    <span class="pl-c1">print</span>(<span class="pl-s">f</span><span class="pl-pds">'</span><span class="pl-s">Variation decay factor </span><span class="pl-c1">{</span>dec<span class="pl-c1">}</span><span class="pl-s">.</span><span class="pl-pds">'</span>)
+    
+    <span class="pl-c1">print</span>(<span class="pl-s"><span class="pl-pds">'</span>Feature tuning...<span class="pl-pds">'</span></span>)
+    new_train <span class="pl-k">=</span> generate_train(df, model)
+    
+    old_model <span class="pl-k">=</span> xgb.XGBClassifier(<span class="pl-k">**</span>const_params, <span class="pl-k">**</span>params)
+    new_feats <span class="pl-k">=</span> ind_to_name(new_train, get_best_features(old_model, new_train.values))
+
+    variable_params <span class="pl-k">=</span> alter_params(params, dec)
+    <span class="pl-c1">print</span>(variable_params)
+
+    <span class="pl-c1">print</span>(<span class="pl-s"><span class="pl-pds">'</span>Param tuning...<span class="pl-pds">'</span></span>)
+    grid <span class="pl-k">=</span> GridSearchCV(xgb.XGBClassifier(<span class="pl-k">**</span>const_params), 
+                        variable_params, 
+                        <span class="pl-v">cv</span><span class="pl-k">=</span>StratifiedKFold(<span class="pl-c1">5</span>), 
+                        <span class="pl-v">scoring</span><span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">'</span>roc_auc<span class="pl-pds">'</span></span>, 
+                        <span class="pl-v">n_jobs</span><span class="pl-k">=</span><span class="pl-k">-</span><span class="pl-c1">1</span>)
+
+    grid.fit(new_train[new_feats].values, y)
+
+    <span class="pl-k">with</span> <span class="pl-c1">open</span>(<span class="pl-s"><span class="pl-pds">'</span>results.csv<span class="pl-pds">'</span></span>,<span class="pl-s"><span class="pl-pds">'</span>a<span class="pl-pds">'</span></span>) <span class="pl-k">as</span> f:
+        f.write(<span class="pl-s"><span class="pl-pds">'</span><span class="pl-cce">\n</span>, <span class="pl-pds">'</span></span>.join([<span class="pl-c1">str</span>(dec), <span class="pl-c1">str</span>(grid.best_score_), <span class="pl-c1">str</span>(grid.best_params_), <span class="pl-c1">str</span>(new_feats)]))
+
+    tune_iteratively(grid.best_params_, dec <span class="pl-k">-</span> <span class="pl-c1">1</span>)</pre></div>
+<p>Day's best: null (Did not, in the end, submit any scores; had other things to attend to.)
+Overall best: 0.88192</p>
+<h4>
+<a id="user-content-reflections-3" class="anchor" href="#reflections-3" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Reflections</h4>
+<h5>
+<a id="user-content-what-went-well-3" class="anchor" href="#what-went-well-3" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What went well</h5>
+<ol>
+<li>Implemented the proposed auto-tuner. We now know that the design is possible and works, albeit inefficiently.</li>
+<li>Experimented with some feature engineering.</li>
+</ol>
+<h5>
+<a id="user-content-what-we-learnt-3" class="anchor" href="#what-we-learnt-3" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What we learnt</h5>
+<ol>
+<li>The tool that we devised is inefficient, but automated. It could be 
+used with success when given a dataset that we are not familiar with, or
+ when one has other tasks. Focused human effort, however, yields better 
+results.</li>
+<li>Feature manipulation has almost no positive effect on our classifier. In fact, it even yields slightly lower scores.</li>
+</ol>
+<h5>
+<a id="user-content-how-we-can-improve-3" class="anchor" href="#how-we-can-improve-3" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How we can improve</h5>
+<ol>
+<li>Attempt to make five submissions a day (not submitting is quite bad).</li>
+</ol>
+<h2>
+<a id="user-content-day-5" class="anchor" href="#day-5" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Day 5</h2>
+<h4>
+<a id="user-content-ideas-4" class="anchor" href="#ideas-4" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Ideas</h4>
+<ul>
+<li>We noticed earlier that for practical purposes, LightBGM with <code>goss</code> proved to be as accurate and much faster than XGBoost. Spend some hours tuning it.</li>
+</ul>
+<div class="highlight highlight-source-python"><pre>selected_cols <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">'</span>f14<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f1<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f15<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f16<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f8<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f4<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f13<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f19<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f17<span class="pl-pds">'</span></span>]
+
+fix_param <span class="pl-k">=</span> {
+    <span class="pl-s"><span class="pl-pds">'</span>boosting_type<span class="pl-pds">'</span></span>:                 <span class="pl-s"><span class="pl-pds">'</span>goss<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>metric<span class="pl-pds">'</span></span>:                        <span class="pl-s"><span class="pl-pds">'</span>auc<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>objective<span class="pl-pds">'</span></span>:                     <span class="pl-s"><span class="pl-pds">'</span>binary<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>scale_pos_weight<span class="pl-pds">'</span></span>:              scale_pos_weight, 
+    <span class="pl-s"><span class="pl-pds">'</span>n_jobs<span class="pl-pds">'</span></span>:                        <span class="pl-k">-</span><span class="pl-c1">1</span>
+}
+
+var_param <span class="pl-k">=</span> {
+      <span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>:                  [<span class="pl-c1">933</span>, <span class="pl-c1">934</span>], 
+      <span class="pl-s"><span class="pl-pds">'</span>learning_rate<span class="pl-pds">'</span></span>:                 [<span class="pl-c1">0.097474</span>], 
+      <span class="pl-s"><span class="pl-pds">'</span>min_child_weight<span class="pl-pds">'</span></span>:              [<span class="pl-c1">1e-3</span>, <span class="pl-c1">1e-9</span>], 
+      <span class="pl-s"><span class="pl-pds">'</span>min_split_gain<span class="pl-pds">'</span></span>:                [<span class="pl-c1">6e-6</span>], 
+      <span class="pl-s"><span class="pl-pds">'</span>colsample_bytree<span class="pl-pds">'</span></span>:              [<span class="pl-c1">0.4</span>], 
+      <span class="pl-s"><span class="pl-pds">'</span>reg_alpha<span class="pl-pds">'</span></span>:                     [<span class="pl-c1">0.05</span>], 
+      <span class="pl-s"><span class="pl-pds">'</span>reg_lambda<span class="pl-pds">'</span></span>:                    [<span class="pl-c1">0.89995</span>]
+}</pre></div>
+<p>Day's best: 0.89364
+Overall best: 0.89364</p>
+<h4>
+<a id="user-content-reflections-4" class="anchor" href="#reflections-4" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Reflections</h4>
+<h5>
+<a id="user-content-what-went-well-4" class="anchor" href="#what-went-well-4" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What went well</h5>
+<ol>
+<li>Had the first significant improvement over our initial auc score. 
+The overall improvement is just ~0.014, but that could prove 
+significant.</li>
+</ol>
+<h5>
+<a id="user-content-what-we-learnt-4" class="anchor" href="#what-we-learnt-4" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What we learnt</h5>
+<ol>
+<li>Using the model's <code>feature_importances_</code> attribute does 
+not always yield the best features. This includes using feature 
+selection methods that rely on the attribute, such as recursive feature 
+elimination <code>RFE</code>.</li>
+<li>We have yet to explore all the hyperparameters of gradient boosting. Learning more about them would be wise.</li>
+</ol>
+<h5>
+<a id="user-content-how-we-can-improve-4" class="anchor" href="#how-we-can-improve-4" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How we can improve</h5>
+<ol>
+<li>Study data, use intuition and handpick to synthesize and/or obtain the best possible features.</li>
+<li>Look further into the LightGBM documentation</li>
+</ol>
+<h2>
+<a id="user-content-day-6" class="anchor" href="#day-6" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Day 6</h2>
+<h4>
+<a id="user-content-ideas-5" class="anchor" href="#ideas-5" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Ideas</h4>
+<ul>
+<li>Our feeble attempts at adding polynomial and interactions have been 
+largely unsuccessful, producing zero or negative gains in the overall 
+AUC score. We are going to spend a large portion of our kaggle-allocated
+ time today simply looking at the data. The aim of this task is to find 
+anything that jumps out at us and hopefully make one or more interaction
+ terms that yield significant gains.</li>
+<li>The highest correlations are between features <code>f8</code>, <code>f13</code> and <code>f19</code>
+ (~0.2). Although this isn't much we will attempt to decompose these 
+into one feature, if only to see what happens. Our hunch is that this is
+ not right; the features are too disparate to be merged like this. 
+Still, we will remain hopeful that at least <code>f8</code> (which is the least important of the three) may be completely replaced by this combination <code>f8wf13wf19</code>.</li>
+<li>There are multiple columns that seem to hover at the 110000 range. Of these <code>f4</code>, <code>f7</code>, <code>f13</code> and <code>f16</code> seem to like staying strictly in that level, while <code>f8</code>, <code>f17</code> and <code>f19</code> seem to like go up to the 300000 level as well. The trend is too prevalent to go ignored.</li>
+<li>We are going to create difference style interactions between a few 
+of the above mentioned columns. There are a few interesting bits of 
+knowledge that come to the fore: <code>f4</code> and <code>f7</code> seem to like staying within 1 or 2 of each other for ages, but then jump up to large differences.</li>
+</ul>
+<div class="highlight highlight-source-python"><pre><span class="pl-k">def</span> <span class="pl-en">transform</span>(<span class="pl-smi">df</span>, <span class="pl-smi">y</span><span class="pl-k">=</span><span class="pl-c1">True</span>):
+    df_copy <span class="pl-k">=</span> df.copy()
+    df_copy[<span class="pl-s"><span class="pl-pds">'</span>f8-f19<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> df[<span class="pl-s"><span class="pl-pds">'</span>f8<span class="pl-pds">'</span></span>] <span class="pl-k">-</span> df[<span class="pl-s"><span class="pl-pds">'</span>f19<span class="pl-pds">'</span></span>]
+    df_copy[<span class="pl-s"><span class="pl-pds">'</span>f8-f13<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> df[<span class="pl-s"><span class="pl-pds">'</span>f8<span class="pl-pds">'</span></span>] <span class="pl-k">-</span> df[<span class="pl-s"><span class="pl-pds">'</span>f13<span class="pl-pds">'</span></span>]
+    df_copy[<span class="pl-s"><span class="pl-pds">'</span>f17-f4<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> df[<span class="pl-s"><span class="pl-pds">'</span>f17<span class="pl-pds">'</span></span>] <span class="pl-k">-</span> df[<span class="pl-s"><span class="pl-pds">'</span>f4<span class="pl-pds">'</span></span>]
+    df_copy[<span class="pl-s"><span class="pl-pds">'</span>f4-f7<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> df[<span class="pl-s"><span class="pl-pds">'</span>f4<span class="pl-pds">'</span></span>] <span class="pl-k">-</span> df[<span class="pl-s"><span class="pl-pds">'</span>f7<span class="pl-pds">'</span></span>]
+    df_copy[<span class="pl-s"><span class="pl-pds">'</span>f13-f19<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> df[<span class="pl-s"><span class="pl-pds">'</span>f13<span class="pl-pds">'</span></span>] <span class="pl-k">-</span> df[<span class="pl-s"><span class="pl-pds">'</span>f19<span class="pl-pds">'</span></span>]
+    df_copy[<span class="pl-s"><span class="pl-pds">'</span>f8wf13wf19<span class="pl-pds">'</span></span>] <span class="pl-k">=</span> PCA(<span class="pl-v">n_components</span><span class="pl-k">=</span><span class="pl-c1">1</span>).fit_transform(df[[<span class="pl-s"><span class="pl-pds">'</span>f8<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f13<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f19<span class="pl-pds">'</span></span>]])
+    <span class="pl-k">return</span> df_copy.drop(<span class="pl-s"><span class="pl-pds">'</span>Y<span class="pl-pds">'</span></span>, <span class="pl-v">axis</span><span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">'</span>columns<span class="pl-pds">'</span></span>) <span class="pl-k">if</span> y <span class="pl-k">else</span> df_copy</pre></div>
+<ul>
+<li>We are going to select columns in a complex manner in which we 
+combine the natural columns with the the synthetic columns we just made.
+ Next, we classify them further into "veterans" and "ignored" depending 
+on our confidence of their place. Then, loop through all the number of 
+columns that we have, and at each step we:
+<ul>
+<li>step forward and select the column that along with the already selected columns gives the highest value of AUC-ROC</li>
+<li>step backward and remove each of the columns within our chosen 
+columns, introducing one of the other columns in its place to see if the
+ combination gives a better roc-auc score. If such a combination exists,
+ set this as the new column set and repeat this step</li>
+</ul>
+</li>
+</ul>
+<div class="highlight highlight-source-python"><pre>veteran_cols <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">'</span>f14<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f0<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f13<span class="pl-pds">'</span></span>] <span class="pl-c"><span class="pl-c">#</span> features that we are confident about</span>
+ignored_cols <span class="pl-k">=</span> [<span class="pl-s"><span class="pl-pds">'</span>f5<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f9<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f11<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f18<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f19<span class="pl-pds">'</span></span>, <span class="pl-s"><span class="pl-pds">'</span>f21<span class="pl-pds">'</span></span>] <span class="pl-c"><span class="pl-c">#</span> features that we know couldn't possibly be right</span>
+
+<span class="pl-k">def</span> <span class="pl-en">feature_selector</span>(<span class="pl-smi">df</span>):
+    primary <span class="pl-k">=</span> (veteran_cols, <span class="pl-c1">0</span>)
+    cols <span class="pl-k">=</span> np.setdiff1d(df.columns.tolist(), ignored_cols).tolist()
+    <span class="pl-k">for</span> _ <span class="pl-k">in</span> <span class="pl-c1">range</span>(<span class="pl-c1">len</span>(cols) <span class="pl-k">-</span> <span class="pl-c1">len</span>(veteran_cols)):
+        best_feature_score <span class="pl-k">=</span> (<span class="pl-c1">0</span>, <span class="pl-c1">0</span>)
+        remaining_features <span class="pl-k">=</span> np.setdiff1d(cols, primary[<span class="pl-c1">0</span>]).tolist()
+        <span class="pl-k">for</span> current_feature <span class="pl-k">in</span> remaining_features:
+            current_features <span class="pl-k">=</span> primary[<span class="pl-c1">0</span>] <span class="pl-k">+</span> [current_feature]
+            current_score <span class="pl-k">=</span> scorer(current_features)
+            <span class="pl-k">if</span> current_score <span class="pl-k">&gt;</span> best_feature_score[<span class="pl-c1">1</span>]:
+                best_feature_score <span class="pl-k">=</span> (current_feature, current_score)
+        <span class="pl-k">if</span> best_feature_score[<span class="pl-c1">1</span>] <span class="pl-k">&gt;</span> primary[<span class="pl-c1">1</span>]:
+            primary <span class="pl-k">=</span> (primary[<span class="pl-c1">0</span>] <span class="pl-k">+</span> [best_feature_score[<span class="pl-c1">0</span>]], best_feature_score[<span class="pl-c1">1</span>])
+            <span class="pl-c1">print</span>(primary)
+        <span class="pl-k">else</span>:
+            <span class="pl-k">break</span>
+
+    <span class="pl-c1">print</span>(<span class="pl-s"><span class="pl-pds">'</span>done<span class="pl-pds">'</span></span>)
+    <span class="pl-c1">print</span>(primary)</pre></div>
+<p><code>done.</code>
+<code>['f14', 'f13', 'f15', 'f4', 'f8wf13wf19', 'f4-f7', 'f16', 'f17', 'f19', 'f1', 'f8-f19']</code></p>
+<ul>
+<li>Use LightGBM and our favoured parameters with the newly selected columns.</li>
+</ul>
+<p>Day's best: 0.89395
+Overall best: 0.89395</p>
+<h4>
+<a id="user-content-reflections-5" class="anchor" href="#reflections-5" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Reflections</h4>
+<h5>
+<a id="user-content-what-went-well-5" class="anchor" href="#what-went-well-5" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What went well</h5>
+<ul>
+<li>Got a miniscule in overall score (in the fourth decimal place). Our 
+intuition is that this is hiding a higher increase on the private 
+leaderboard because the local score increase was almost 0.05.</li>
+<li>Have a much more initimate understanding of the features now.</li>
+</ul>
+<h5>
+<a id="user-content-what-we-learnt-5" class="anchor" href="#what-we-learnt-5" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What we learnt</h5>
+<ul>
+<li>PCA is almost unusable. It gives an increase in the AUC score but 
+the low correlation between each of the columns (&lt;= 0.2) means that, 
+at least theoretically, we are losing data when we do that.</li>
+<li>Some of the difference between the columns are strongly correlated with each other (~0.9). The column sets are (<code>f8</code>, <code>f8-f13</code>, <code>f8-f19</code>) and (<code>f17</code>, <code>f17-f4</code>). It makes next to no sense to us at this moment that the <em>differences</em>
+ between these features are behaving in this manner. This lends credence
+ to the possibility that the data is at least partially manually 
+generated. We cannot see a way of taking advantage of this fact at the 
+moment beyond the obvious of selecting only one of the features in these
+ sets or decomposing them to generate a lower number of better features.</li>
+</ul>
+<h5>
+<a id="user-content-how-we-can-improve-5" class="anchor" href="#how-we-can-improve-5" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>How we can improve</h5>
+<ul>
+<li>At this point we are approaching the end of the competition placed 
+around the top 5, and we have to believe that just about everyone has 
+tried everything we have. That is, we need to try something not everyone
+ would have done.</li>
+<li>Examining <a href="https://www.kaggle.com/c/otto-group-product-classification-challenge/discussion/14335" rel="nofollow">this</a>
+ post of a past Kaggle winner reveals that after selecting good 
+features, it is necessary to do something more involved to get the best 
+possible AUC score. We will attempt true ensembling next.</li>
+</ul>
+<h2>
+<a id="user-content-day-7" class="anchor" href="#day-7" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Day 7</h2>
+<h4>
+<a id="user-content-ideas-6" class="anchor" href="#ideas-6" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Ideas</h4>
+<ul>
+<li>The first layer of the ensemble will use a combination of the raw 
+features that we found performed best in addition to the more successful
+ features that we synthesized the previous day. The second layer of the 
+ensemble will take as input the soft output of the first layer models. 
+The best features overall will be steadily added to the second layer 
+input if they performance. The features used for the first layer of 
+models were <code>f1</code>, <code>f4</code>, <code>f8</code>, <code>f13</code>, <code>f14</code>, <code>f15</code>, <code>f16</code>, <code>f17</code>, <code>f8-f19</code>, <code>f8-f13</code>, <code>f17-f4</code>, <code>f4-f7</code> and <code>f8wf13wf19</code>.</li>
+<li>Our ensemble will have a first layer of models that perform well or 
+at least decently. It could be noted that the AUC score for the <code>KNeighborsClassifier</code>s peaked with 128 neighbors. The features for the second layer model were:
+<ul>
+<li><code>RandomForestClassifier</code></li>
+<li><code>ExtraTreesClassifier</code></li>
+<li><code>AdaBoostClassifier</code></li>
+<li><code>GradientBoostingClassifier</code></li>
+<li>
+<code>KNeighborsClassifier</code> with 64 neighbours</li>
+<li>
+<code>KNeighborsClassifier</code> with 128 neighbours</li>
+<li>
+<code>KNeighborsClassifier</code> with 256 neighbours</li>
+<li><code>LGBMClassifier</code></li>
+<li><code>XGBClassifier</code></li>
+<li>And the same features as above added in order of importance (gain-wise) if they increase the AUC score.</li>
+</ul>
+</li>
+<li>The first layer model parameters are to be found by <code>GridSearchCV</code>.</li>
+</ul>
+<div class="highlight highlight-source-python"><pre>rf_params <span class="pl-k">=</span> {
+    <span class="pl-s"><span class="pl-pds">'</span>class_weight<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>balanced<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>criterion<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>gini<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>: <span class="pl-c1">600</span>
+}
+
+et_params <span class="pl-k">=</span> {
+    <span class="pl-s"><span class="pl-pds">'</span>class_weight<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>balanced<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>criterion<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>entropy<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>: <span class="pl-c1">500</span>
+}
+
+ada_params <span class="pl-k">=</span> {
+    <span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>: <span class="pl-c1">400</span>,
+    <span class="pl-s"><span class="pl-pds">'</span>learning_rate<span class="pl-pds">'</span></span> : <span class="pl-c1">0.9</span>
+}
+
+gb_params <span class="pl-k">=</span> {
+    <span class="pl-s"><span class="pl-pds">'</span>loss<span class="pl-pds">'</span></span>: <span class="pl-s"><span class="pl-pds">'</span>exponential<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>max_depth<span class="pl-pds">'</span></span>: <span class="pl-c1">5</span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>: <span class="pl-c1">750</span>, 
+}
+
+lgb_params <span class="pl-k">=</span> {
+    <span class="pl-s"><span class="pl-pds">'</span>boosting_type<span class="pl-pds">'</span></span>:                 <span class="pl-s"><span class="pl-pds">'</span>goss<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>metric<span class="pl-pds">'</span></span>:                        <span class="pl-s"><span class="pl-pds">'</span>auc<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>objective<span class="pl-pds">'</span></span>:                     <span class="pl-s"><span class="pl-pds">'</span>binary<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>scale_pos_weight<span class="pl-pds">'</span></span>:              scale_pos_weight, 
+    <span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>:                  <span class="pl-c1">550</span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>learning_rate<span class="pl-pds">'</span></span>:                 <span class="pl-c1">0.09</span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>colsample_bytree<span class="pl-pds">'</span></span>:              <span class="pl-c1">0.1</span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>reg_alpha<span class="pl-pds">'</span></span>:                     <span class="pl-c1">0</span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>reg_lambda<span class="pl-pds">'</span></span>:                    <span class="pl-c1">0.89995</span>, 
+}
+
+xgb_params <span class="pl-k">=</span> {
+    <span class="pl-s"><span class="pl-pds">'</span>objective<span class="pl-pds">'</span></span>:                      <span class="pl-s"><span class="pl-pds">'</span>binary:logistic<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>booster<span class="pl-pds">'</span></span>:                        <span class="pl-s"><span class="pl-pds">'</span>gbtree<span class="pl-pds">'</span></span>,
+    <span class="pl-s"><span class="pl-pds">'</span>tree_method<span class="pl-pds">'</span></span>:                    <span class="pl-s"><span class="pl-pds">'</span>exact<span class="pl-pds">'</span></span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>eval_metric<span class="pl-pds">'</span></span>:                    <span class="pl-s"><span class="pl-pds">'</span>auc<span class="pl-pds">'</span></span>,
+    <span class="pl-s"><span class="pl-pds">'</span>scale_pos_weight<span class="pl-pds">'</span></span>:               scale_pos_weight,
+    <span class="pl-s"><span class="pl-pds">'</span>max_depth<span class="pl-pds">'</span></span>:                      <span class="pl-c1">12</span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>learning_rate<span class="pl-pds">'</span></span>:                  <span class="pl-c1">0.075</span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>n_estimators<span class="pl-pds">'</span></span>:                   <span class="pl-c1">350</span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>colsample_bylevel<span class="pl-pds">'</span></span>:              <span class="pl-c1">0.03</span>, 
+    <span class="pl-s"><span class="pl-pds">'</span>colsample_bynode<span class="pl-pds">'</span></span>:               <span class="pl-c1">0.86</span>
+}</pre></div>
+<ul>
+<li>And finally the second layer output would not be calibrated via a <code>scale_pos_weight</code> but instead using a dedicated calibrator <code>CalibratedClassifierCV</code>.
+ The aim here is to counteract the confidence loss the second layer 
+model would suffer when compared to the best first layer models that 
+were exposed to the raw data.</li>
+</ul>
+<div class="highlight highlight-source-python"><pre>train, x_cal, y, y_cal <span class="pl-k">=</span> train_test_split(train, y, <span class="pl-v">test_size</span><span class="pl-k">=</span><span class="pl-c1">0.2</span>)
+
+first_layer_models <span class="pl-k">=</span> [
+    RandomForestClassifier(<span class="pl-k">**</span>rf_params),
+    ExtraTreesClassifier(<span class="pl-k">**</span>et_params),
+    AdaBoostClassifier(<span class="pl-k">**</span>ada_params),
+    GradientBoostingClassifier(<span class="pl-k">**</span>gb_params),
+    lgbm.LGBMClassifier(<span class="pl-k">**</span>lgb_params),
+    xgb.XGBClassifier(<span class="pl-k">**</span>xgb_params)
+]
+
+[model.fit(train, y) <span class="pl-k">for</span> model <span class="pl-k">in</span> first_layer_models]
+
+first_layer_train_preds <span class="pl-k">=</span> [model.predict_proba(train)[:, <span class="pl-c1">1</span>] <span class="pl-k">for</span> model <span class="pl-k">in</span> first_layer_models]
+first_layer_test_preds <span class="pl-k">=</span> [model.predict_proba(test)[:, <span class="pl-c1">1</span>] <span class="pl-k">for</span> model <span class="pl-k">in</span> first_layer_models]
+first_layer_cal <span class="pl-k">=</span> [model.predict_proba(x_cal)[:, <span class="pl-c1">1</span>] <span class="pl-k">for</span> model <span class="pl-k">in</span> first_layer_models]
+
+second_layer_train <span class="pl-k">=</span> np.append(np.array(first_layer_train_preds), train.T, <span class="pl-v">axis</span><span class="pl-k">=</span><span class="pl-c1">0</span>).T
+second_layer_test <span class="pl-k">=</span> np.append(np.array(first_layer_test_preds), test.T, <span class="pl-v">axis</span><span class="pl-k">=</span><span class="pl-c1">0</span>).T
+second_layer_cal <span class="pl-k">=</span> np.append(np.array(first_layer_cal), x_cal.T, <span class="pl-v">axis</span><span class="pl-k">=</span><span class="pl-c1">0</span>).T
+
+second_layer_model <span class="pl-k">=</span> xgb.XGBClassifier(<span class="pl-k">**</span>xgb2_params)
+second_layer_model.fit(second_layer_train, y)
+
+calibrator <span class="pl-k">=</span> CalibratedClassifierCV(second_layer_model, <span class="pl-v">method</span><span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">'</span>sigmoid<span class="pl-pds">'</span></span>, <span class="pl-v">cv</span><span class="pl-k">=</span><span class="pl-s"><span class="pl-pds">'</span>prefit<span class="pl-pds">'</span></span>)
+calibrator.fit(second_layer_cal, y_cal)
+
+last_predictions <span class="pl-k">=</span> calibrator.predict_proba(test)[:, <span class="pl-c1">1</span>]</pre></div>
+<p>Day's best: 0.89395
+Overall best: 0.89395</p>
+<h4>
+<a id="user-content-reflections-6" class="anchor" href="#reflections-6" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Reflections</h4>
+<h5>
+<a id="user-content-what-went-well-6" class="anchor" href="#what-went-well-6" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What went well</h5>
+<ul>
+<li>We were able to find several pre-built ensembles to use in the first
+ layer of models that gave very strong AUC scores of around 0.86 on 
+average. The best of these, of course, was our previous best <code>LGBMClassifier</code> with the correct parameters with a score of ~0.89.</li>
+<li>Very curiously, we obtained exactly the same AUC score as our best model doing the whole setup.</li>
+</ul>
+<h5>
+<a id="user-content-what-we-learnt-6" class="anchor" href="#what-we-learnt-6" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What we learnt</h5>
+<ul>
+<li>A key concept here during training is to use a <code>StratifiedKFold</code> cross validator with a constant <code>random_state</code>
+ set so that it never occurs that the first layer models have already 
+"seen" the test data of the second layer model. We had an AUC score of 
+0.99 the first time testing the setup which was actually an unfortunate 
+0.82 on the true test set on Kaggle.</li>
+<li>It turns out that the ensemble did best while using all the first 
+layer features as an additional input to the second layer. This was 
+unexpected too. Fortunately, looking at the <code>features_importances_</code> attribute of the second layer model revealed that it was relying on the first layer outputs too.</li>
+<li>The fact that the ensemble did only as well as the best first layer 
+model and required the same inputs to do so throws us off here. We were 
+expecting our attempt to probably fail and hopefully do extremely well. 
+The fact that it performed the same means that the purpose of ensembling
+ is lost. It is possible that the second layer model "detected" the 
+output of the best performer and relied on its output more than it did 
+the other first layer models.</li>
+<li>We need much more experience with machine learning to attempt proper stacking and ensembling.</li>
+</ul>
+
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    
+
+  </div>
+  <div>&nbsp;</div>
+  </div><script>
+    function showCanonicalImages() {
+      var images = document.getElementsByTagName('img');
+      if (!images) {
+        return;
+      }
+      for (var index = 0; index < images.length; index++) {
+        var image = images[index];
+        if (image.getAttribute('data-canonical-src') && image.src !== image.getAttribute('data-canonical-src')) {
+          image.src = image.getAttribute('data-canonical-src');
+        }
+      }
+    }
+
+    function scrollToHash() {
+      if (location.hash && !document.querySelector(':target')) {
+        var element = document.getElementById('user-content-' + location.hash.slice(1));
+        if (element) {
+           element.scrollIntoView();
+        }
+      }
+    }
+
+    function autorefreshContent(eventSourceUrl) {
+      var initialTitle = document.title;
+      var contentElement = document.getElementById('grip-content');
+      var source = new EventSource(eventSourceUrl);
+      var isRendering = false;
+
+      source.onmessage = function(ev) {
+        var msg = JSON.parse(ev.data);
+        if (msg.updating) {
+          isRendering = true;
+          document.title = '(Rendering) ' + document.title;
+        } else {
+          isRendering = false;
+          document.title = initialTitle;
+          contentElement.innerHTML = msg.content;
+          showCanonicalImages();
+        }
+      }
+
+      source.onerror = function(e) {
+        if (e.readyState === EventSource.CLOSED && isRendering) {
+          isRendering = false;
+          document.title = initialTitle;
+        }
+      }
+    }
+
+    window.onhashchange = function() {
+      scrollToHash();
+    }
+
+    window.onload = function() {
+      scrollToHash();
+    }
+
+    showCanonicalImages();
+
+    var autorefreshUrl = document.getElementById('preview-page').getAttribute('data-autorefresh-url');
+    if (autorefreshUrl) {
+      autorefreshContent(autorefreshUrl);
+    }
+  </script>
+
+</body></html>
